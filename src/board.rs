@@ -1,7 +1,8 @@
-use std::mem::{self, MaybeUninit};
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::mem::{self, MaybeUninit};
 
+#[macro_export]
 macro_rules! set {
     ( $( $x:expr ),* ) => {  // Match zero or more comma delimited items
         {
@@ -27,10 +28,11 @@ where
 }
 
 #[derive(Clone)]
-struct Board {
+pub struct Board {
     digits: [Option<u8>; 81],
     pencilmarks: [HashSet<u8>; 81],
     boxes: [bool; 9],
+    last_box: u8,
 }
 
 fn one_to_nine() -> HashSet<u8> {
@@ -38,11 +40,19 @@ fn one_to_nine() -> HashSet<u8> {
 }
 
 impl Board {
-    fn get_unsolved_box(&self) -> Option<u8> {
-        for i in 1..9 {
-            if !self.boxes[i] {
-                return Some(i as u8);
+    fn get_unsolved_box(&mut self) -> Option<SudokuBox> {
+        let mut some_unsolved = false;
+        for i in 1..9{
+            some_unsolved = some_unsolved | self.boxes[i as usize];
+        }
+        for i in self.last_box + 1..9 {
+            if !self.boxes[i as usize] {
+                self.last_box = i as u8;
+                return Some(self.get_box(i as u8));
             }
+        }
+        if some_unsolved {
+            self.last_box = 0;
         }
         return None;
     }
@@ -51,7 +61,17 @@ impl Board {
         let x = (bx % 3) * 3;
         let cols = set!(y, y + 1, y + 2);
         let rows = set!(x, x + 1, x + 2);
-        return SudokuBox::new(rows, cols);
+        return SudokuBox::new(rows, cols, bx as usize);
+    }
+    fn left_to_place(&self, bx: &SudokuBox) -> HashSet<u8> {
+        let mut placed = HashSet::<u8>::new();
+        for i in &bx.inds {
+            if let Some(j) = self.digits[*i as usize] {
+                placed.insert(j);
+            }
+        }
+        let left_to_place = iter_to_set(one_to_nine().difference(&placed));
+        return left_to_place;
     }
     fn pencil_out(&self, idx: usize, pencilmarks: &HashSet<u8>) -> Board {
         let mut new_marks = self.pencilmarks[idx].clone();
@@ -64,6 +84,7 @@ impl Board {
             digits: self.digits,
             pencilmarks: new_board_marks,
             boxes: self.boxes,
+            last_box: 0,
         };
     }
     fn pencil_out_mut(&mut self, idx: usize, pencilmarks: &HashSet<u8>) {
@@ -80,33 +101,38 @@ impl Board {
             digits,
             pencilmarks,
             boxes: self.boxes,
+            last_box: 0
         };
     }
     fn place_mut(&mut self, idx: usize, digit: u8) {
         self.digits[idx] = Some(digit);
         self.pencilmarks[idx] = HashSet::<u8>::new();
     }
-    fn new(digits: HashMap<usize, u8>) -> Board{
+    pub fn new(digits: HashMap<usize, u8>) -> Board {
         let mut board = Board::empty_board();
         for (key, val) in digits {
             board.place_mut(key, val);
         }
         return board;
     }
-    fn empty_board() -> Board{
-
+    fn empty_board() -> Board {
         // It's a good thing this heads of a fuckton of bugs, because it's a royal pain in the ass.
-        let mut pencilmarks: [MaybeUninit<HashSet<u8>>; 81]= unsafe{ MaybeUninit::uninit().assume_init()};
-        for i in 0..81{
+        let mut pencilmarks: [MaybeUninit<HashSet<u8>>; 81] =
+            unsafe { MaybeUninit::uninit().assume_init() };
+        for i in 0..81 {
             pencilmarks[i] = MaybeUninit::new(HashSet::<u8>::new());
         }
-        let pencilmarks = unsafe {
-            mem::transmute::<_, [HashSet<u8>; 81]>(pencilmarks)
-        };
-        return Board{
+        let pencilmarks = unsafe { mem::transmute::<_, [HashSet<u8>; 81]>(pencilmarks) };
+        return Board {
             digits: [None; 81],
             pencilmarks,
             boxes: [false; 9],
+            last_box: 0
+        };
+    }
+    fn mark_if_finished(&mut self, bx: SudokuBox){
+        if self.left_to_place(&bx).len()==0{
+            self.boxes[bx.idx] = true;
         }
     }
 }
@@ -130,24 +156,17 @@ struct SudokuBox {
     rows: HashSet<u8>,
     cols: HashSet<u8>,
     inds: HashSet<u8>,
+    idx: usize,
 }
 impl SudokuBox {
-    fn new(rows: HashSet<u8>, cols: HashSet<u8>) -> SudokuBox {
+    fn new(rows: HashSet<u8>, cols: HashSet<u8>, idx: usize) -> SudokuBox {
         let mut inds = HashSet::<u8>::new();
         for i in &rows {
             for j in &cols {
                 inds.insert(9 * i + j);
             }
         }
-        return SudokuBox { rows, cols, inds };
-    }
-    fn left_to_place(&self) -> HashSet<u8> {
-        let mut placed = HashSet::<u8>::new();
-        for i in &self.inds {
-            placed.insert(*i);
-        }
-        let placed = iter_to_set(one_to_nine().difference(&placed));
-        return placed;
+        return SudokuBox { rows, cols, inds , idx};
     }
     fn row_inds_outside_box(&self, row: u8) -> HashSet<u8> {
         let row_inds = set!(
@@ -255,7 +274,7 @@ fn place_pencilmarks(board: Board, current_box: &SudokuBox) -> Board {
                 digits_seen.insert(i);
             }
         }
-        for k in current_box.row_inds_inside_box(i){
+        for k in current_box.row_inds_inside_box(i) {
             next_board.pencil_out_mut(k as usize, &digits_seen);
         }
     }
@@ -268,11 +287,10 @@ fn place_pencilmarks(board: Board, current_box: &SudokuBox) -> Board {
                 digits_seen.insert(i);
             }
         }
-        for k in current_box.col_inds_inside_box(i){
+        for k in current_box.col_inds_inside_box(i) {
             next_board.pencil_out_mut(k as usize, &digits_seen);
         }
     }
-
     return next_board;
 }
 
@@ -282,23 +300,33 @@ fn pencil_and_place(board: Board, current_box: SudokuBox) -> Board {
     next_board = place_pencilmarks(next_board, &current_box);
 
     next_board = collapse_pencilmarks(next_board, &current_box);
-    
+
+    next_board.mark_if_finished(current_box);
+
     return next_board;
 }
 
-fn solve(board: Board) {
+pub fn solve(board: Board) -> Board{
     let mut unsolved = true;
     let mut working_board = board.clone();
     while unsolved {
         // get an unsolved box
-        let target_box = match working_board.get_unsolved_box() {
-            Some(n) => n,
+        let current_box = match working_board.get_unsolved_box() {
+            Some(bx) => bx,
             None => {
                 unsolved = false;
-                return;
+                continue;
             }
         };
-        let current_box = working_board.get_box(target_box);
-        working_board = pencil_and_place(working_board,current_box);
+        working_board = pencil_and_place(working_board, current_box);
     }
+    return working_board;
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_things() {}
+    #[test]
+    fn test_idx() {}
 }
