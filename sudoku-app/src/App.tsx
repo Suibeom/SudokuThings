@@ -22,36 +22,38 @@ function App() {
     </div>
   );
 }
-function getPosition(idx: number):{x: number, y:number}{
+function getPosition(idx: number): { x: number, y: number } {
   let row = idx % 9;
   let col = Math.floor(idx / 9);
-  let x = row * 52 + Math.floor(row/3) * 8;
-  let y = col * 52 + Math.floor(col/3) * 8;
-  return {x, y};
+  let x = row * 52 + Math.floor(row / 3) * 1;
+  let y = col * 52 + Math.floor(col / 3) * 1;
+  return { x, y };
 }
 
 export class SudokuSquare extends React.Component {
   props: SquareProps;
-  position: {x: number, y:number};
   constructor(props: SquareProps) {
     super(props);
     this.props = props
-    this.position = getPosition(this.props.square.idx);
   }
-  selectMe() {
-    this.props.select(this.props.square.idx);
-  }
-  render() {
-    return <React.Fragment>
 
-      <svg className="su-cell__value su-stretch" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" onClick={() => this.selectMe()}>
-      <text x={0} y={40} className="su-cell-number">{this.props.square.idx}</text>
-      {this.props.square.contents ? numbers[this.props.square.contents] : numbers[0]}
+  render() {
+    const rawDigit = parseInt(this.props.square.contents ?? '');
+    const digit = isNaN(rawDigit) ? 0 : rawDigit;
+    let pencilmarks = this.props.square.pencilmarks.map((mark) => pencilmark(mark));
+    return <React.Fragment>
+      <svg className="su-cell__value su-stretch" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" onClick={() => this.props.select()}>
+        {/* <text x={0} y={40} className="su-cell-number">{this.props.square.idx}</text> */}
+        {numbers[digit]}
+        {digit === 0 ? pencilmarks : ''}
       </svg>
 
-      </React.Fragment>
+    </React.Fragment>
   }
 }
+
+type SudokuDigit =
+  "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
 
 interface SquareProps {
   select: SelectCallback
@@ -59,14 +61,12 @@ interface SquareProps {
 }
 
 interface SelectCallback {
-  (idx: number): void,
+  (): void,
 }
 
 interface SquareState {
-  idx: number,
-  selected: boolean,
-  contents: number | null,
-  pencilmarks: number[],
+  contents: SudokuDigit | null,
+  pencilmarks: SudokuDigit[],
 }
 
 interface BoardState {
@@ -76,27 +76,64 @@ interface BoardState {
 
 export class SudokuBoard extends React.Component {
   state: BoardState
-  selectCallback: SelectCallback;
   constructor(props: Readonly<{}>) {
     super(props);
-    let squares: SquareState[] = Array(81).fill(undefined).map((_, idx): SquareState => ({ selected: false, contents: null, pencilmarks: [], idx }));
+    let squares: SquareState[] = Array(81).fill(undefined).map((_, idx): SquareState => ({ contents: null, pencilmarks: []}));
     this.state = { squares, selected_square: null };
-    this.state.squares[0] = { selected: false, contents: 1, pencilmarks: [], idx: 0 };
-    this.state.squares[2] = { selected: false, contents: 4, pencilmarks: [], idx: 2 };
-    console.log(this.state.squares.length);
-    console.log(this.state.squares);
-    this.selectCallback = this.select.bind(this);
+    this.state.squares[0] = { contents: "1", pencilmarks: []};
+    this.state.squares[12] = { contents: null, pencilmarks: ["1", "2", "3", "4", "5", "6", "7", "8", "9"] };
+    this.state.squares[2] = { contents: "4", pencilmarks: [] };
   }
   select(idx: number): void {
-    this.setState((state) => ({...state, selected_square: idx}));
+    this.setState((state) => ({ ...state, selected_square: idx }));
     console.log("Selected %d", idx);
   }
   updateState(idx: number, newState: SquareState): void {
-    this.setState((state:BoardState) => {state.squares[idx] = newState; return state;})
+    this.setState((state: BoardState) => { state.squares[idx] = newState; return state; })
   }
   render() {
-    return <div className="sudoku-board">{this.state.squares.map((square) => (<div className={"su-cell " + (square.idx === this.state.selected_square ? "selected" : "")}><SudokuSquare {...{ select: this.selectCallback, square: square }} /></div>))}</div>
+    return <div 
+    className="sudoku-board" 
+    tabIndex={-1} 
+    onKeyDown={(e) => handleKeypress(this, e)}>
+      {this.state.squares.map((square, idx) => squareHelper(this, square, idx))}
+    </div>
   }
+}
+function handleKeypress(board: SudokuBoard, event: React.KeyboardEvent<HTMLDivElement>) {
+  console.log(event.key);
+  if (board.state.selected_square == null) {
+    return;
+  }
+  if (/^[1-9]$/.test(event.key)) {
+    const newSquareState = board.state.squares[board.state.selected_square];
+    newSquareState.contents = event.key as SudokuDigit;
+    board.updateState(board.state.selected_square, newSquareState);
+  }
+  if (event.key === "Backspace") {
+    const newSquareState = board.state.squares[board.state.selected_square];
+    newSquareState.contents = null;
+    board.updateState(board.state.selected_square, newSquareState);
+  }
+  if (/^Arrow(Up|Down|Left|Right)$/.test(event.key)) {
+    const offset = ArrowMap.get(event.key) ?? 0;
+    const new_square = board.state.selected_square + offset;
+    if (new_square < 0 || new_square > 80) {
+      return;
+    }
+    board.select(new_square);
+  }
+}
+
+function squareHelper(board: SudokuBoard, square: SquareState, idx: number) {
+  const position = getPosition(idx);
+  const style = { top: `${position.y + 3}px`, left: `${position.x + 3}px`, width: '51px', height: '51px' };
+  const className = "su-cell" + (idx === board.state.selected_square ? " selected" : "")
+  return (
+    <div className={className} style={style}>
+      <SudokuSquare {...{ select: () => board.select(idx), square: square }} />
+    </div>
+  )
 }
 
 export default App;
@@ -112,3 +149,21 @@ const numbers = [
   <path className="su-number" d="M134.892 121.677C134.892 110.6 128.8 102.569 117.169 97.5847C125.615 93.5693 131.569 86.0924 131.569 77.3693C131.569 63.1078 119.8 53.0001 99.5846 53.0001C79.6462 53.0001 66.9077 64.7693 66.9077 80.0001C66.9077 89.277 72.0308 96.7539 80.8923 101.323C70.0923 105.754 64 114.754 64 123.615C64 138.985 76.7385 149.369 99.1692 149.369C121.185 149.369 134.892 137.462 134.892 121.677ZM113.154 78.8924C113.154 84.9847 111.077 89.5539 104.292 92.4616C91.8308 88.1693 86.7077 84.2924 86.7077 77.6462C86.7077 71.6924 91.5539 67.2616 99.5846 67.2616C107.754 67.2616 113.154 72.6616 113.154 78.8924ZM114.4 123.892C114.4 130.677 108.862 135.385 99.1692 135.385C88.6462 135.385 82.9692 130.123 82.9692 122.092C82.9692 115.723 86.4308 110.877 93.7692 107.831C108.585 112.262 114.4 116.692 114.4 123.892Z"></path>,
   <path className="su-number" d="M134.455 97.1693C134.455 69.8924 119.502 53.0001 98.4554 53.0001C80.04 53.0001 64.2554 66.5693 64.2554 86.0924C64.2554 105.615 78.1015 114.754 92.9169 114.754C101.917 114.754 107.732 110.877 113.409 107.692C111.886 128.323 103.994 133.446 94.8554 133.446C88.4861 133.446 83.2246 128.877 81.0092 123.339L64.8092 130.815C69.6554 142.723 79.6246 149.092 93.8861 149.092C120.609 149.092 134.455 125.415 134.455 97.1693ZM113.409 93.5693C110.363 95.7847 104.548 99.2463 98.4554 99.2463C91.2554 99.2463 85.3015 94.8155 85.3015 84.4309C85.3015 74.4616 89.3169 67.2616 98.7323 67.2616C108.148 67.2616 113.409 76.2616 113.409 93.5693Z"></path>,
 ];
+
+function pencilmark(rawMark: SudokuDigit) {
+  const mark = digitToNum(rawMark);
+  const x = (mark - 1) % 3;
+  const y = Math.floor((mark - 1) / 3);
+  return <text className="su-pencilmark" x={x * 66 + 20} y={y * 66 + 50}>{rawMark}</text>
+}
+
+function digitToNum(digit: SudokuDigit): number {
+  const int = parseInt(digit as string);
+  if (isNaN(int)) {
+    throw `Failed to assert SudokuDigit as an integer: ${digit}`;
+  }
+  return int;
+}
+
+const ArrowMap: Map<string, number> =
+  new Map([["ArrowUp", -9], ["ArrowDown", 9], ["ArrowRight", 1], ["ArrowLeft", -1]]);

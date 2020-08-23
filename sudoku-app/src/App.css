@@ -36,8 +36,14 @@
   fill: #000;
 }
 
+.su-pencilmark{
+  font: italic 40px sans-serif;
+  fill: #000;
+}
+
 .su-cell{
-  outline: solid 1px #7070ff;
+  outline: solid 1px #000000;
+  position:absolute;
 }
 
 .selected{
@@ -50,7 +56,7 @@
   max-width:800px;
   columns: 9;
   column-gap: 2px;
-  row-gap: 2px;
+  row-gap:2px;
 }
 
 @keyframes App-logo-spin {

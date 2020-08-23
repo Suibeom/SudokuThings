@@ -1,3 +1,4 @@
+use serde::ser::{Serialize, SerializeStruct, SerializeTuple, Serializer};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::mem::{self, MaybeUninit};
@@ -42,7 +43,7 @@ fn one_to_nine() -> HashSet<u8> {
 impl Board {
     fn get_unsolved_box(&mut self) -> Option<SudokuBox> {
         let mut some_unsolved = false;
-        for i in 1..9{
+        for i in 1..9 {
             some_unsolved = some_unsolved | self.boxes[i as usize];
         }
         for i in self.last_box + 1..9 {
@@ -101,7 +102,7 @@ impl Board {
             digits,
             pencilmarks,
             boxes: self.boxes,
-            last_box: 0
+            last_box: 0,
         };
     }
     fn place_mut(&mut self, idx: usize, digit: u8) {
@@ -127,30 +128,51 @@ impl Board {
             digits: [None; 81],
             pencilmarks,
             boxes: [false; 9],
-            last_box: 0
+            last_box: 0,
         };
     }
-    fn mark_if_finished(&mut self, bx: SudokuBox){
-        if self.left_to_place(&bx).len()==0{
+    fn mark_if_finished(&mut self, bx: SudokuBox) {
+        if self.left_to_place(&bx).len() == 0 {
             self.boxes[bx.idx] = true;
         }
     }
 }
 
-// #[derive(Clone)]
-// struct Set {
-//     digits: HashSet<u8>,
-// }
-// impl Set {
-//     fn intersect(&self, other: &Set) -> Set{
-//         let digits = iter_to_set(self.digits.intersection(&other.digits));
-//         return Set{digits};
-//     }
-//     fn  difference(&self, other: &Set) -> Set{
-//         let digits = iter_to_set(self.digits.difference(&other.digits));
-//         return Set{digits};
-//     }
-// }
+impl Serialize for Board {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut squarestates = serializer.serialize_tuple(81)?;
+        for i in 0..81 {
+            let current_square: SquareState = SquareState {
+                contents: self.digits[i],
+                pencilmarks: self.pencilmarks[i].clone(),
+            };
+            squarestates.serialize_element(&current_square)?;
+        }
+        squarestates.end()
+    }
+}
+
+
+
+struct SquareState {
+    contents: Option<u8>,
+    pencilmarks: HashSet<u8>,
+}
+
+impl Serialize for SquareState {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("SquareState", 2)?;
+        state.serialize_field("contents", &self.contents)?;
+        state.serialize_field("pencilmarks", &self.pencilmarks)?;
+        state.end()
+    }
+}
 
 struct SudokuBox {
     rows: HashSet<u8>,
@@ -166,7 +188,12 @@ impl SudokuBox {
                 inds.insert(9 * i + j);
             }
         }
-        return SudokuBox { rows, cols, inds , idx};
+        return SudokuBox {
+            rows,
+            cols,
+            inds,
+            idx,
+        };
     }
     fn row_inds_outside_box(&self, row: u8) -> HashSet<u8> {
         let row_inds = set!(
@@ -306,7 +333,7 @@ fn pencil_and_place(board: Board, current_box: SudokuBox) -> Board {
     return next_board;
 }
 
-pub fn solve(board: Board) -> Board{
+pub fn solve(board: Board) -> Board {
     let mut unsolved = true;
     let mut working_board = board.clone();
     while unsolved {
