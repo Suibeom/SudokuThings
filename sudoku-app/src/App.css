@@ -28,6 +28,31 @@
   color: #61dafb;
 }
 
+.su-number{
+  fill: #000;
+}
+.su-cell-number{
+  font: italic 40px sans-serif;
+  fill: #000;
+}
+
+.su-cell{
+  outline: solid 1px #7070ff;
+}
+
+.selected{
+  background-color: #f0f0f0;
+}
+
+.sudoku-board{
+  width:80vh;
+  min-width:500px;
+  max-width:800px;
+  columns: 9;
+  column-gap: 2px;
+  row-gap: 2px;
+}
+
 @keyframes App-logo-spin {
   from {
     transform: rotate(0deg);
