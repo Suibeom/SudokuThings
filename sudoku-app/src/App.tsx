@@ -1,27 +1,6 @@
 import React from 'react';
-import logo, { ReactComponent } from './logo.svg';
 import './App.css';
 
-function App() {
-  return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
-  );
-}
 function getPosition(idx: number): { x: number, y: number } {
   let row = idx % 9;
   let col = Math.floor(idx / 9);
@@ -71,49 +50,92 @@ interface SquareState {
 
 interface BoardState {
   squares: SquareState[],
-  selected_square: number | null,
 }
 
-export class SudokuBoard extends React.Component {
-  state: BoardState
-  constructor(props: Readonly<{}>) {
+interface GameContainerState {
+  server_alive: boolean,
+  last_payload: Object,
+  last_board_state: BoardState,
+  selected_square: number | null,
+  history: BoardState[],
+}
+
+interface GameContainerProps {
+  server_address: string
+}
+
+export class SudokuGameContainer extends React.Component {
+  state: GameContainerState;
+  props: GameContainerProps;
+  constructor(props: Readonly<GameContainerProps>) {
     super(props);
-    let squares: SquareState[] = Array(81).fill(undefined).map((_, idx): SquareState => ({ contents: null, pencilmarks: []}));
-    this.state = { squares, selected_square: null };
-    this.state.squares[0] = { contents: "1", pencilmarks: []};
-    this.state.squares[12] = { contents: null, pencilmarks: ["1", "2", "3", "4", "5", "6", "7", "8", "9"] };
-    this.state.squares[2] = { contents: "4", pencilmarks: [] };
+    this.props = props;
+    let squares: SquareState[] = Array(81).fill(undefined).map((_, idx): SquareState => ({ contents: null, pencilmarks: [] }));
+    squares[12] = { contents: null, pencilmarks: ["1", "2", "3", "4", "5", "6", "7", "8", "9"] };
+    squares[2] = { contents: "4", pencilmarks: [] };
+    squares[0] = { contents: "1", pencilmarks: [] };
+    this.state = { server_alive: false, last_payload: {}, history: [], last_board_state: { squares }, selected_square: null };
   }
+
+  async componentDidMount() {
+    try {
+      const ping = await fetch(this.props.server_address);
+      if (ping.ok) {
+        this.setState(
+          (state: GameContainerState) => {
+            const newState = state;
+            newState.server_alive = true;
+            return newState
+          })
+      }
+    } catch {
+      console.log("Ping failed, server not alive");
+    }
+  }
+
+
   select(idx: number): void {
     this.setState((state) => ({ ...state, selected_square: idx }));
     console.log("Selected %d", idx);
   }
-  updateState(idx: number, newState: SquareState): void {
-    this.setState((state: BoardState) => { state.squares[idx] = newState; return state; })
+  updateSquare(idx: number, newSquareState: SquareState): void {
+    this.setState((state: GameContainerState) => {
+      let newState = state;
+      newState.last_board_state.squares[idx] = newSquareState;
+      return newState;
+    });
   }
   render() {
-    return <div 
-    className="sudoku-board" 
-    tabIndex={-1} 
-    onKeyDown={(e) => handleKeypress(this, e)}>
-      {this.state.squares.map((square, idx) => squareHelper(this, square, idx))}
+    return <div>
+      <div><button className="server-button" onClick={() => { }} disabled={!this.state.server_alive}>{this.state.server_alive ? "Server ready" : "Server not ready"}</button></div>
+      <div className="game-container">
+        <div
+          className="sudoku-board"
+          tabIndex={-1}
+          onKeyDown={(e) => boardKeyboardHandler(this, e)}>
+          {this.state.last_board_state.squares.map((square, idx) => squareHelper(this, square, idx))}
+        </div>
+      </div>
     </div>
+
   }
 }
-function handleKeypress(board: SudokuBoard, event: React.KeyboardEvent<HTMLDivElement>) {
+
+
+function boardKeyboardHandler(board: SudokuGameContainer, event: React.KeyboardEvent<HTMLDivElement>) {
   console.log(event.key);
   if (board.state.selected_square == null) {
     return;
   }
   if (/^[1-9]$/.test(event.key)) {
-    const newSquareState = board.state.squares[board.state.selected_square];
+    const newSquareState = board.state.last_board_state.squares[board.state.selected_square];
     newSquareState.contents = event.key as SudokuDigit;
-    board.updateState(board.state.selected_square, newSquareState);
+    board.updateSquare(board.state.selected_square, newSquareState);
   }
   if (event.key === "Backspace") {
-    const newSquareState = board.state.squares[board.state.selected_square];
+    const newSquareState = board.state.last_board_state.squares[board.state.selected_square];
     newSquareState.contents = null;
-    board.updateState(board.state.selected_square, newSquareState);
+    board.updateSquare(board.state.selected_square, newSquareState);
   }
   if (/^Arrow(Up|Down|Left|Right)$/.test(event.key)) {
     const offset = ArrowMap.get(event.key) ?? 0;
@@ -125,7 +147,7 @@ function handleKeypress(board: SudokuBoard, event: React.KeyboardEvent<HTMLDivEl
   }
 }
 
-function squareHelper(board: SudokuBoard, square: SquareState, idx: number) {
+function squareHelper(board: SudokuGameContainer, square: SquareState, idx: number) {
   const position = getPosition(idx);
   const style = { top: `${position.y + 3}px`, left: `${position.x + 3}px`, width: '51px', height: '51px' };
   const className = "su-cell" + (idx === board.state.selected_square ? " selected" : "")
@@ -136,7 +158,6 @@ function squareHelper(board: SudokuBoard, square: SquareState, idx: number) {
   )
 }
 
-export default App;
 const numbers = [
   '',
   <path className="su-number" d="M125.369 131.815H110.138V54H98.9231C89.7846 60.5077 84.3846 63.5538 74 68.4V81.5538L89.6462 77.6769V131.815H74V147.323H125.369V131.815Z"></path>,
@@ -160,7 +181,7 @@ function pencilmark(rawMark: SudokuDigit) {
 function digitToNum(digit: SudokuDigit): number {
   const int = parseInt(digit as string);
   if (isNaN(int)) {
-    throw `Failed to assert SudokuDigit as an integer: ${digit}`;
+    throw Error(`Failed to assert SudokuDigit as an integer: ${digit}`);
   }
   return int;
 }

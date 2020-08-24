@@ -46,6 +46,15 @@
   position:absolute;
 }
 
+.game-container {
+  outline: solid 2px #aaaaaa;
+  position: relative;
+}
+
+.server-button {
+  position: relative;
+}
+
 .selected{
   background-color: #f0f0f0;
 }

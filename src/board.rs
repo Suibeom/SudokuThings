@@ -1,4 +1,5 @@
-use serde::ser::{Serialize, SerializeStruct, SerializeTuple, Serializer};
+use serde::ser::{SerializeStruct, SerializeTuple, Serializer};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::mem::{self, MaybeUninit};
@@ -116,6 +117,28 @@ impl Board {
         }
         return board;
     }
+    fn from_square_state_vec(squares: Vec<SquareState>) -> Board {
+        let mut board = Board::empty_board();
+        for i in 1..squares.len() {
+            match squares[i].contents {
+                None => {}
+                Some(j) => {
+                    board.place_mut(i, j);
+                    continue;
+                }
+            }
+            board.pencil_out_mut(i, &squares[i].pencilmarks);
+        }
+        for j in 0..9 {
+            board.mark_if_finished(board.get_box(j));
+        }
+        return board;
+    }
+    pub fn from_str(str: String) -> Board {
+        let square_state_vec:Vec<SquareState> = serde_json::from_str(&str).unwrap();
+        return Board::from_square_state_vec(square_state_vec);
+    }
+
     fn empty_board() -> Board {
         // It's a good thing this heads of a fuckton of bugs, because it's a royal pain in the ass.
         let mut pencilmarks: [MaybeUninit<HashSet<u8>>; 81] =
@@ -155,9 +178,8 @@ impl Serialize for Board {
     }
 }
 
-
-
-struct SquareState {
+#[derive(Deserialize)]
+pub struct SquareState {
     contents: Option<u8>,
     pencilmarks: HashSet<u8>,
 }

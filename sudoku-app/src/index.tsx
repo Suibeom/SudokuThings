@@ -1,12 +1,12 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
-import App, { SudokuBoard } from './App';
+import { SudokuGameContainer } from './App';
 import * as serviceWorker from './serviceWorker';
 
 ReactDOM.render(
   <React.StrictMode>
-<SudokuBoard />
+<SudokuGameContainer server_address="127.0.0.1:4000"/>
   </React.StrictMode>,
   document.getElementById('root')
 );
