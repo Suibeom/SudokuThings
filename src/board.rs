@@ -33,8 +33,61 @@ where
 pub struct Board {
     digits: [Option<u8>; 81],
     pencilmarks: [HashSet<u8>; 81],
+}
+
+#[derive(Clone)]
+pub struct Solver {
+    board: Board,
     boxes: [bool; 9],
     last_box: u8,
+}
+
+impl Solver {
+    fn mark_if_finished(&mut self, bx: SudokuBox) {
+        if self.board.left_to_place(&bx).len() == 0 {
+            self.boxes[bx.idx] = true;
+        }
+    }
+    fn get_unsolved_box(&mut self) -> Option<SudokuBox> {
+        let mut some_unsolved = false;
+        for i in 1..9 {
+            some_unsolved = some_unsolved | self.boxes[i as usize];
+        }
+        for i in (self.last_box + 1)..9 {
+            if !self.boxes[i as usize] {
+                self.last_box = i;
+                return Some(self.board.get_box(i as u8));
+            }
+        }
+        if some_unsolved {
+            self.last_box = 0;
+            return self.get_unsolved_box();
+        }
+        return None;
+    }
+    pub fn init_with_board(mut board: Board) -> Solver {
+        // if we're just initializing the board assume that any empty squares without pencilmarks are
+        // actually untouched, not that they represent a contradiction.
+        for i in 0..81 {
+            if let None = board.digits[i] {
+                if board.pencilmarks[i].len() == 0 {
+                    board.pencilmarks[i] = one_to_nine();
+                }
+            }
+        }
+        let mut new_solver = Solver {
+            board,
+            boxes: [false; 9],
+            last_box: 0,
+        };
+        for j in 0..9 {
+            new_solver.mark_if_finished(new_solver.board.get_box(j));
+        }
+        return new_solver;
+    }
+    pub fn get_board(&self) -> Board {
+        return self.board.clone();
+    }
 }
 
 fn one_to_nine() -> HashSet<u8> {
@@ -42,22 +95,6 @@ fn one_to_nine() -> HashSet<u8> {
 }
 
 impl Board {
-    fn get_unsolved_box(&mut self) -> Option<SudokuBox> {
-        let mut some_unsolved = false;
-        for i in 1..9 {
-            some_unsolved = some_unsolved | self.boxes[i as usize];
-        }
-        for i in self.last_box + 1..9 {
-            if !self.boxes[i as usize] {
-                self.last_box = i as u8;
-                return Some(self.get_box(i as u8));
-            }
-        }
-        if some_unsolved {
-            self.last_box = 0;
-        }
-        return None;
-    }
     fn get_box(&self, bx: u8) -> SudokuBox {
         let y = (bx / 3) * 3;
         let x = (bx % 3) * 3;
@@ -85,8 +122,6 @@ impl Board {
         return Board {
             digits: self.digits,
             pencilmarks: new_board_marks,
-            boxes: self.boxes,
-            last_box: 0,
         };
     }
     fn pencil_out_mut(&mut self, idx: usize, pencilmarks: &HashSet<u8>) {
@@ -102,8 +137,6 @@ impl Board {
         return Board {
             digits,
             pencilmarks,
-            boxes: self.boxes,
-            last_box: 0,
         };
     }
     fn place_mut(&mut self, idx: usize, digit: u8) {
@@ -119,7 +152,7 @@ impl Board {
     }
     fn from_square_state_vec(squares: Vec<SquareState>) -> Board {
         let mut board = Board::empty_board();
-        for i in 1..squares.len() {
+        for i in 0..squares.len() {
             match squares[i].contents {
                 None => {}
                 Some(j) => {
@@ -127,37 +160,27 @@ impl Board {
                     continue;
                 }
             }
-            board.pencil_out_mut(i, &squares[i].pencilmarks);
-        }
-        for j in 0..9 {
-            board.mark_if_finished(board.get_box(j));
+            board.pencilmarks[i] = squares[i].pencilmarks.clone();
         }
         return board;
     }
     pub fn from_str(str: String) -> Board {
-        let square_state_vec:Vec<SquareState> = serde_json::from_str(&str).unwrap();
+        let square_state_vec: Vec<SquareState> = serde_json::from_str(&str).unwrap();
         return Board::from_square_state_vec(square_state_vec);
     }
 
     fn empty_board() -> Board {
-        // It's a good thing this heads of a fuckton of bugs, because it's a royal pain in the ass.
+        // It's a good thing this heads off a fuckton of bugs, because it's a royal pain in the ass.
         let mut pencilmarks: [MaybeUninit<HashSet<u8>>; 81] =
             unsafe { MaybeUninit::uninit().assume_init() };
         for i in 0..81 {
-            pencilmarks[i] = MaybeUninit::new(HashSet::<u8>::new());
+            pencilmarks[i] = MaybeUninit::new(one_to_nine());
         }
         let pencilmarks = unsafe { mem::transmute::<_, [HashSet<u8>; 81]>(pencilmarks) };
         return Board {
             digits: [None; 81],
             pencilmarks,
-            boxes: [false; 9],
-            last_box: 0,
         };
-    }
-    fn mark_if_finished(&mut self, bx: SudokuBox) {
-        if self.left_to_place(&bx).len() == 0 {
-            self.boxes[bx.idx] = true;
-        }
     }
 }
 
@@ -292,7 +315,7 @@ fn collapse_pencilmarks(board: Board, current_box: &SudokuBox) -> Board {
     //     }
     // }
 
-    for i in one_to_nine() {
+    for i in board.left_to_place(current_box) {
         let mut count = 0;
         let mut last_index: Option<usize> = None;
         for j in current_box.inds.clone() {
@@ -303,8 +326,8 @@ fn collapse_pencilmarks(board: Board, current_box: &SudokuBox) -> Board {
         }
         if count == 1 {
             if let Some(j) = last_index {
-                next_board.place(j as usize, i);
-                next_board.pencilmarks[i as usize] = HashSet::<u8>::new();
+                next_board.place_mut(j as usize, i);
+                next_board.pencilmarks[j as usize] = HashSet::<u8>::new();
             }
         }
     }
@@ -343,33 +366,45 @@ fn place_pencilmarks(board: Board, current_box: &SudokuBox) -> Board {
     return next_board;
 }
 
-fn pencil_and_place(board: Board, current_box: SudokuBox) -> Board {
+fn pencil_and_place(board: Solver, current_box: SudokuBox) -> Solver {
     let mut next_board = board.clone();
 
-    next_board = place_pencilmarks(next_board, &current_box);
+    next_board.board = place_pencilmarks(next_board.board, &current_box);
 
-    next_board = collapse_pencilmarks(next_board, &current_box);
+    next_board.board = collapse_pencilmarks(next_board.board, &current_box);
 
     next_board.mark_if_finished(current_box);
 
     return next_board;
 }
 
+pub fn work_one_box(solver: Solver, box_index: Option<u8>) -> Solver {
+    let mut new_solver = solver;
+    let working_box = match box_index {
+        None => match new_solver.get_unsolved_box() {
+            Some(sudoku_box) => sudoku_box,
+            None => return new_solver,
+        },
+        Some(box_index) => new_solver.board.get_box(box_index),
+    };
+    return pencil_and_place(new_solver, working_box);
+}
+
 pub fn solve(board: Board) -> Board {
     let mut unsolved = true;
-    let mut working_board = board.clone();
+    let mut solver = Solver::init_with_board(board.clone());
     while unsolved {
         // get an unsolved box
-        let current_box = match working_board.get_unsolved_box() {
+        let current_box = match solver.get_unsolved_box() {
             Some(bx) => bx,
             None => {
                 unsolved = false;
                 continue;
             }
         };
-        working_board = pencil_and_place(working_board, current_box);
+        solver = pencil_and_place(solver, current_box);
     }
-    return working_board;
+    return solver.board;
 }
 
 #[cfg(test)]

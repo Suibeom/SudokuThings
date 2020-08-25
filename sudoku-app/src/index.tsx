@@ -6,7 +6,7 @@ import * as serviceWorker from './serviceWorker';
 
 ReactDOM.render(
   <React.StrictMode>
-<SudokuGameContainer server_address="127.0.0.1:4000"/>
+    <SudokuGameContainer server_address="http://localhost:4000" />
   </React.StrictMode>,
   document.getElementById('root')
 );

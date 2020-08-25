@@ -9,6 +9,15 @@ function getPosition(idx: number): { x: number, y: number } {
   return { x, y };
 }
 
+function getBoxIndex(idx: number): number {
+  let row = idx % 9;
+  let col = Math.floor(idx / 9);
+  let block_x = Math.floor(row / 3);
+  let block_y = Math.floor(col / 3);
+  let bx = 3 * block_x + block_y;
+  return bx
+}
+
 export class SudokuSquare extends React.Component {
   props: SquareProps;
   constructor(props: SquareProps) {
@@ -76,7 +85,6 @@ export class SudokuGameContainer extends React.Component {
     squares[0] = { contents: "1", pencilmarks: [] };
     this.state = { server_alive: false, last_payload: {}, history: [], last_board_state: { squares }, selected_square: null };
   }
-
   async componentDidMount() {
     try {
       const ping = await fetch(this.props.server_address);
@@ -89,11 +97,30 @@ export class SudokuGameContainer extends React.Component {
           })
       }
     } catch {
-      console.log("Ping failed, server not alive");
+      console.log("Ping failed, cannot reach server");
     }
   }
-
-
+  async submitAndUpdateBoardstate(endpoint: string) {
+    try {
+      this.setState((state) => ({ data_ready: false }));
+      const response = await fetch(this.props.server_address + endpoint + `?${this.state.selected_square ? getBoxIndex(this.state.selected_square) : null}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.state.last_board_state.squares)
+      })
+      const data = await response.json()
+      this.setState((state: GameContainerState) => {
+        const newState = state;
+        const newBoard = { squares: data } as BoardState;
+        newState.history.push(state.last_board_state);
+        newState.last_board_state = newBoard;
+        newState.last_payload = data;
+        return newState
+      });
+    } catch {
+      console.log("A bad thing happened");
+    }
+  }
   select(idx: number): void {
     this.setState((state) => ({ ...state, selected_square: idx }));
     console.log("Selected %d", idx);
@@ -105,9 +132,12 @@ export class SudokuGameContainer extends React.Component {
       return newState;
     });
   }
+
   render() {
+
     return <div>
-      <div><button className="server-button" onClick={() => { }} disabled={!this.state.server_alive}>{this.state.server_alive ? "Server ready" : "Server not ready"}</button></div>
+      <div><button className="server-button" onClick={() => this.submitAndUpdateBoardstate("/board")} disabled={!this.state.server_alive}>{this.state.server_alive ? "/board" : "Server not ready"}</button></div>
+      <div><button className="server-button" onClick={() => this.submitAndUpdateBoardstate("/board/solve_square")} disabled={!this.state.server_alive}>{this.state.server_alive ? "/board/solve_square" : "Server not ready"}</button> </div>
       <div className="game-container">
         <div
           className="sudoku-board"
@@ -120,7 +150,6 @@ export class SudokuGameContainer extends React.Component {
 
   }
 }
-
 
 function boardKeyboardHandler(board: SudokuGameContainer, event: React.KeyboardEvent<HTMLDivElement>) {
   console.log(event.key);
