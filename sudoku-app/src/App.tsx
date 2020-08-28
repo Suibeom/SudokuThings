@@ -61,6 +61,15 @@ interface BoardState {
   squares: SquareState[],
 }
 
+interface TransmittableBoard {
+  squares: TransmittableSquare[],
+}
+
+interface TransmittableSquare {
+  contents: number | null,
+  pencilmarks: number[],
+}
+
 interface GameContainerState {
   server_alive: boolean,
   last_payload: Object,
@@ -106,12 +115,12 @@ export class SudokuGameContainer extends React.Component {
       const response = await fetch(this.props.server_address + endpoint + `?${this.state.selected_square ? getBoxIndex(this.state.selected_square) : null}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(this.state.last_board_state.squares)
+        body: JSON.stringify(packBoard(this.state.last_board_state).squares)
       })
       const data = await response.json()
       this.setState((state: GameContainerState) => {
         const newState = state;
-        const newBoard = { squares: data } as BoardState;
+        const newBoard = unpackBoard({ squares: data });
         newState.history.push(state.last_board_state);
         newState.last_board_state = newBoard;
         newState.last_payload = data;
@@ -161,7 +170,7 @@ function boardKeyboardHandler(board: SudokuGameContainer, event: React.KeyboardE
     newSquareState.contents = event.key as SudokuDigit;
     board.updateSquare(board.state.selected_square, newSquareState);
   }
-  if (event.key === "Backspace") {
+  if (event.key === "Backspace" || event.key === "0") {
     const newSquareState = board.state.last_board_state.squares[board.state.selected_square];
     newSquareState.contents = null;
     board.updateSquare(board.state.selected_square, newSquareState);
@@ -175,6 +184,17 @@ function boardKeyboardHandler(board: SudokuGameContainer, event: React.KeyboardE
     board.select(new_square);
   }
 }
+
+function packBoard(board: BoardState): TransmittableBoard {
+  return { squares: board.squares.map((elt: SquareState): TransmittableSquare => ({ contents: elt.contents === null ? null : parseInt(elt.contents), pencilmarks: elt.pencilmarks.map((mark) => parseInt(mark)) })) }
+}
+
+function unpackBoard(board: TransmittableBoard): BoardState {
+  return { squares: board.squares.map((elt: TransmittableSquare): SquareState => ({ contents: elt.contents === null ? null : new String(elt.contents) as SudokuDigit, pencilmarks: elt.pencilmarks.map((mark) => new String(mark) as SudokuDigit) })) }
+
+}
+
+
 
 function squareHelper(board: SudokuGameContainer, square: SquareState, idx: number) {
   const position = getPosition(idx);

@@ -41,13 +41,52 @@ const NYT_EASY_BOARD: [(usize, u8); 38] = [
     (80, 7),
 ];
 
-fn nyt_easy_vec() -> Vec<(usize, u8)> { 
+const NYT_HARD_BOARD: [(usize, u8); 24] = [
+    (14, 1),
+    (15, 2),
+    (16, 6),
+    (17, 9),
+    (18, 2),
+    (22, 5),
+    (26, 1),
+    (31, 8),
+    (32, 6),
+    (33, 9),
+    (37, 5),
+    (40, 4),
+    (41, 9),
+    (52, 7),
+    (55, 3),
+    (56, 8),
+    (58, 7),
+    (60, 6),
+    (65, 5),
+    (70, 9),
+    (71, 7),
+    (73, 9),
+    (77, 5),
+    (80, 4),
+];
+
+fn nyt_easy_vec() -> Vec<(usize, u8)> {
     return NYT_EASY_BOARD.to_vec();
 }
-pub fn nyt_easy_map() -> HashMap<usize, u8>{
+pub fn nyt_easy_map() -> HashMap<usize, u8> {
     let mut board_map = HashMap::<usize, u8>::new();
     let vec = nyt_easy_vec();
-    for (j, k) in vec{
+    for (j, k) in vec {
+        board_map.insert(j, k);
+    }
+    return board_map;
+}
+
+fn nyt_hard_vec() -> Vec<(usize, u8)> {
+    return NYT_HARD_BOARD.to_vec();
+}
+pub fn nyt_hard_map() -> HashMap<usize, u8> {
+    let mut board_map = HashMap::<usize, u8>::new();
+    let vec = nyt_hard_vec();
+    for (j, k) in vec {
         board_map.insert(j, k);
     }
     return board_map;

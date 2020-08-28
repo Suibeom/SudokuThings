@@ -24,12 +24,13 @@ async fn boogie_board(req: Request<Body>) -> Result<Response<Body>, Infallible> 
         ("/board", &Method::POST) => {
             // let body_string = stringify_body(req).await;
             println!("Sending NYT Sudoku Board");
-            let nyt_easy_starting_board = board::Board::new(crate::consts::nyt_easy_map());
-            let serialized_easy_board = serde_json::to_string(&nyt_easy_starting_board).unwrap();
+            let starting_board = board::Board::new(crate::consts::nyt_hard_map());
+            // let solved = board::solve(nyt_easy_starting_board);
+            let serialized_board = serde_json::to_string(&starting_board).unwrap();
             let res = Response::builder()
                 .header("Access-Control-Allow-Origin", "*")
                 .header("Access-Control-Allow-Headers", "Content-Type")
-                .body::<Body>(serialized_easy_board.into())
+                .body::<Body>(serialized_board.into())
                 .unwrap();
             Ok(res)
         }

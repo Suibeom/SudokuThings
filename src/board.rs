@@ -44,25 +44,36 @@ pub struct Solver {
 
 impl Solver {
     fn mark_if_finished(&mut self, bx: SudokuBox) {
+        println!(
+            "Lef to place in box {}: {}",
+            bx.idx,
+            self.board.left_to_place(&bx).len()
+        );
         if self.board.left_to_place(&bx).len() == 0 {
             self.boxes[bx.idx] = true;
         }
     }
     fn get_unsolved_box(&mut self) -> Option<SudokuBox> {
-        let mut some_unsolved = false;
-        for i in 1..9 {
-            some_unsolved = some_unsolved | self.boxes[i as usize];
+        let mut all_solved = true;
+        for i in 0..9 {
+            all_solved = all_solved & self.boxes[i as usize];
         }
-        for i in (self.last_box + 1)..9 {
-            if !self.boxes[i as usize] {
-                self.last_box = i;
-                return Some(self.board.get_box(i as u8));
+        if !all_solved {
+            let mut idx = self.last_box;
+            idx += 1;
+            if idx > 8 {
+                idx = 0;
             }
-        }
-        if some_unsolved {
-            self.last_box = 0;
-            return self.get_unsolved_box();
-        }
+            while self.boxes[idx as usize] {
+                if idx < 8 {
+                    idx += 1;
+                } else {
+                    idx = 0;
+                }
+            }
+            self.last_box = idx;
+            return Some(self.board.get_box(idx as u8));
+        };
         return None;
     }
     pub fn init_with_board(mut board: Board) -> Solver {
@@ -102,14 +113,17 @@ impl Board {
         let rows = set!(x, x + 1, x + 2);
         return SudokuBox::new(rows, cols, bx as usize);
     }
-    fn left_to_place(&self, bx: &SudokuBox) -> HashSet<u8> {
+    fn placed(&self, bx: &SudokuBox) -> HashSet<u8> {
         let mut placed = HashSet::<u8>::new();
         for i in &bx.inds {
             if let Some(j) = self.digits[*i as usize] {
                 placed.insert(j);
             }
         }
-        let left_to_place = iter_to_set(one_to_nine().difference(&placed));
+        return placed;
+    }
+    fn left_to_place(&self, bx: &SudokuBox) -> HashSet<u8> {
+        let left_to_place = iter_to_set(one_to_nine().difference(&self.placed(bx)));
         return left_to_place;
     }
     fn pencil_out(&self, idx: usize, pencilmarks: &HashSet<u8>) -> Board {
@@ -278,6 +292,7 @@ impl SudokuBox {
             col + 27,
             col + 36,
             col + 45,
+            col + 54,
             col + 63,
             col + 72
         );
@@ -292,6 +307,7 @@ impl SudokuBox {
             col + 27,
             col + 36,
             col + 45,
+            col + 54,
             col + 63,
             col + 72
         );
@@ -300,21 +316,9 @@ impl SudokuBox {
     }
 }
 
-fn collapse_pencilmarks(board: Board, current_box: &SudokuBox) -> Board {
+//Conventional digit placement.
+fn type_1_pencilmark_collapse(board: Board, current_box: &SudokuBox) -> Board {
     let mut next_board = board.clone();
-    // This step is basically laser-finding Naked Singles
-    // so I don't think I want it in for 'humanistic' reasons.
-    //
-    // for i in current_box.inds.clone() {
-    //     if board.pencilmarks[i as usize].len() == 1 {
-    //         next_board.place(
-    //             i as usize,
-    //             *board.pencilmarks[i as usize].iter().next().unwrap(),
-    //         );
-    //         next_board.pencilmarks[i as usize] = HashSet::<u8>::new();
-    //     }
-    // }
-
     for i in board.left_to_place(current_box) {
         let mut count = 0;
         let mut last_index: Option<usize> = None;
@@ -335,18 +339,57 @@ fn collapse_pencilmarks(board: Board, current_box: &SudokuBox) -> Board {
     return next_board;
 }
 
-fn place_pencilmarks(board: Board, current_box: &SudokuBox) -> Board {
+//Determine 'naked singles'
+fn type_2_pencilmark_collapse(board: Board, current_box: &SudokuBox) -> Board {
+    let mut next_board = board.clone();
+
+    for i in current_box.inds.clone() {
+        if board.pencilmarks[i as usize].len() == 1 {
+            let digits = board.pencilmarks[i as usize].clone();
+            println!("Digits: {:?}", digits);
+            for digit in digits {
+                println!("Digit:{}", digit);
+                next_board.place_mut(i as usize, digit);
+            }
+            next_board.pencilmarks[i as usize] = HashSet::<u8>::new();
+        }
+    }
+
+    // for i in board.left_to_place(current_box) {
+    //     let mut count = 0;
+    //     let mut last_index: Option<usize> = None;
+    //     for j in current_box.inds.clone() {
+    //         if board.pencilmarks[j as usize].contains(&i) {
+    //             count += 1;
+    //             last_index.replace(j as usize);
+    //         }
+    //     }
+    //     if count == 1 {
+    //         if let Some(j) = last_index {
+    //             next_board.place_mut(j as usize, i);
+    //             next_board.pencilmarks[j as usize] = HashSet::<u8>::new();
+    //         }
+    //     }
+    // }
+
+    return next_board;
+}
+
+fn place_simple_pencilmarks(board: Board, current_box: &SudokuBox) -> Board {
     let mut next_board = board.clone();
 
     //rows first
     for i in current_box.rows.clone() {
         let mut digits_seen = HashSet::<u8>::new();
         for j in current_box.row_inds_outside_box(i) {
-            if let Some(i) = board.digits[j as usize] {
-                digits_seen.insert(i);
+            if let Some(l) = board.digits[j as usize] {
+                digits_seen.insert(l);
+                // println!("Seen digit {} in row {}", l, i);
             }
         }
         for k in current_box.row_inds_inside_box(i) {
+            // println!("Penciling out options from row {}, box {}", i, k);
+            next_board.pencil_out_mut(k as usize, &board.placed(current_box));
             next_board.pencil_out_mut(k as usize, &digits_seen);
         }
     }
@@ -355,23 +398,191 @@ fn place_pencilmarks(board: Board, current_box: &SudokuBox) -> Board {
     for i in current_box.cols.clone() {
         let mut digits_seen = HashSet::<u8>::new();
         for j in current_box.col_inds_outside_box(i) {
-            if let Some(i) = board.digits[j as usize] {
-                digits_seen.insert(i);
+            if let Some(l) = board.digits[j as usize] {
+                digits_seen.insert(l);
+                // println!("Seen digit {} in column {}", l, i);
             }
         }
         for k in current_box.col_inds_inside_box(i) {
+            // println!("Penciling out options from column {}, box {}", i, k);
+            next_board.pencil_out_mut(k as usize, &board.placed(current_box));
             next_board.pencil_out_mut(k as usize, &digits_seen);
         }
     }
     return next_board;
 }
 
-fn pencil_and_place(board: Solver, current_box: SudokuBox) -> Solver {
+// If a digit is only possible in a certain row or column outside of the current box
+// it can be penciled out of that row or column in the current box.
+
+fn place_derived_pencilmarks(board: Board, current_box: &SudokuBox) -> Board {
     let mut next_board = board.clone();
 
-    next_board.board = place_pencilmarks(next_board.board, &current_box);
+    //rows first
+    for i in current_box.rows.clone() {
+        let mut other_rows = current_box.rows.clone();
+        other_rows.remove(&i);
+        let mut pencilmarks_in_row = HashSet::<u8>::new();
+        let mut pencilmarks_in_other_rows = HashSet::<u8>::new();
+        for j in current_box.row_inds_outside_box(i) {
+            pencilmarks_in_row =
+                iter_to_set(pencilmarks_in_row.union(&board.pencilmarks[j as usize]));
+        }
+        for h in other_rows {
+            for j in current_box.row_inds_outside_box(h) {
+                pencilmarks_in_other_rows =
+                    iter_to_set(pencilmarks_in_other_rows.union(&board.pencilmarks[j as usize]));
+            }
+        }
+        let elidable_pencilmarks =
+            iter_to_set(pencilmarks_in_row.difference(&pencilmarks_in_other_rows));
+        for k in current_box.row_inds_inside_box(i) {
+            // println!("Penciling out options from row {}, box {}", i, k);
+            next_board.pencil_out_mut(k as usize, &elidable_pencilmarks);
+        }
+    }
 
-    next_board.board = collapse_pencilmarks(next_board.board, &current_box);
+    //then cols
+    for i in current_box.cols.clone() {
+        let mut other_cols = current_box.cols.clone();
+        other_cols.remove(&i);
+        let mut pencilmarks_in_col = HashSet::<u8>::new();
+        let mut pencilmarks_in_other_cols = HashSet::<u8>::new();
+        for j in current_box.col_inds_outside_box(i) {
+            pencilmarks_in_col =
+                iter_to_set(pencilmarks_in_col.union(&board.pencilmarks[j as usize]));
+        }
+        for h in other_cols {
+            for j in current_box.col_inds_outside_box(h) {
+                pencilmarks_in_other_cols =
+                    iter_to_set(pencilmarks_in_other_cols.union(&board.pencilmarks[j as usize]));
+            }
+        }
+        let elidable_pencilmarks =
+            iter_to_set(pencilmarks_in_col.difference(&pencilmarks_in_other_cols));
+        for k in current_box.row_inds_inside_box(i) {
+            next_board.pencil_out_mut(k as usize, &elidable_pencilmarks);
+        }
+    }
+
+    return next_board;
+}
+
+// If you have n cells whose pencilmarks are all a subset of a subset of size n,
+// You can eliminate those pencilmarks from all other cells.
+
+// For naturalism reasons, this will only look at sets already occuring in the box.
+fn resolve_subset_pencilmarks(board: Board, current_box: &SudokuBox) -> Board {
+    let mut next_board = board.clone();
+
+    for i in current_box.inds.clone() {
+        let current_marks = board.pencilmarks[i as usize].clone();
+        let mut similar_boxes = HashSet::<u8>::new();
+        //find the squares whose pencilmarks are a subset of this one
+        for j in current_box.inds.clone() {
+            if let Some(_) = board.digits[j as usize] {
+                continue;
+            }
+            if board.pencilmarks[j as usize].is_subset(&current_marks) {
+                similar_boxes.insert(j);
+            }
+        }
+        //If the number of squares matches the size of the subset, those
+        // numbers are all constrained to these squares so pencil them out!
+        if similar_boxes.len() == current_marks.len() {
+            for j in iter_to_set(current_box.inds.clone().difference(&similar_boxes)) {
+                next_board.pencil_out_mut(j as usize, &current_marks);
+            }
+        }
+    }
+
+    return next_board;
+}
+
+fn resolve_cycle_pencilmarks(board: Board, current_box: &SudokuBox) -> Board {
+    let mut next_board = board.clone();
+    let mut already_visited = HashSet::<u8>::new();
+    for i in current_box.inds.clone() {
+        if already_visited.contains(&i) {
+            continue;
+        }
+        if board.pencilmarks[i as usize].len() != 2 {
+            continue;
+        }
+        let mut cycle_boxes = HashSet::<u8>::new();
+        cycle_boxes.insert(i);
+
+        let cycle_start = board.pencilmarks[i as usize].clone();
+        let mut cycle_current = cycle_start.clone();
+        let mut digits_seen = cycle_start.clone();
+        let mut closed: bool = false;
+        let mut finished: bool = false;
+        while finished == false {
+            finished = true;
+            for j in current_box.inds.clone() {
+                if already_visited.contains(&j) {
+                    continue;
+                }
+                if board.pencilmarks[j as usize].len() != 2 {
+                    continue;
+                }
+                // cycle closed, break and sort it all out.
+                if iter_to_set(cycle_start.intersection(&board.pencilmarks[j as usize])).len() == 1
+                {
+                    cycle_boxes.insert(j);
+                    closed = true;
+                    finished = true;
+                    break;
+                }
+                //cycle continued!
+                if iter_to_set(cycle_current.intersection(&board.pencilmarks[j as usize])).len()
+                    == 1
+                {
+                    cycle_current = board.pencilmarks[j as usize].clone();
+                    digits_seen = iter_to_set(digits_seen.union(&cycle_current));
+                    cycle_boxes.insert(j);
+                    finished = false;
+                    break;
+                }
+            }
+        }
+        already_visited = iter_to_set(already_visited.union(&cycle_boxes));
+        if closed {
+            for j in iter_to_set(current_box.inds.clone().difference(&cycle_boxes)) {
+                next_board.pencil_out_mut(j as usize, &digits_seen);
+            }
+        }
+    }
+
+    return next_board;
+}
+
+fn pencil_and_place_simple(board: Solver, current_box: SudokuBox) -> Solver {
+    let mut next_board = board.clone();
+
+    next_board.board = place_simple_pencilmarks(next_board.board, &current_box);
+
+    next_board.board = type_1_pencilmark_collapse(next_board.board, &current_box);
+
+    next_board.mark_if_finished(current_box);
+
+    return next_board;
+}
+
+fn pencil_and_place_complex(board: Solver, current_box: SudokuBox) -> Solver {
+    let mut next_board = board.clone();
+
+    next_board.board = place_simple_pencilmarks(next_board.board, &current_box);
+
+    next_board.board = place_derived_pencilmarks(next_board.board, &current_box);
+
+    next_board.board = resolve_cycle_pencilmarks(next_board.board, &current_box);
+
+    next_board.board = resolve_subset_pencilmarks(next_board.board, &current_box);
+
+    // next_board.board = type_1_pencilmark_collapse(next_board.board, &current_box);
+
+    // next_board.board = type_2_pencilmark_collapse(next_board.board, &current_box);
 
     next_board.mark_if_finished(current_box);
 
@@ -387,7 +598,7 @@ pub fn work_one_box(solver: Solver, box_index: Option<u8>) -> Solver {
         },
         Some(box_index) => new_solver.board.get_box(box_index),
     };
-    return pencil_and_place(new_solver, working_box);
+    return pencil_and_place_complex(new_solver, working_box);
 }
 
 pub fn solve(board: Board) -> Board {
@@ -402,7 +613,7 @@ pub fn solve(board: Board) -> Board {
                 continue;
             }
         };
-        solver = pencil_and_place(solver, current_box);
+        solver = pencil_and_place_simple(solver, current_box);
     }
     return solver.board;
 }
