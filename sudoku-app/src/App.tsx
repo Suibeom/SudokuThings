@@ -183,6 +183,9 @@ function boardKeyboardHandler(board: SudokuGameContainer, event: React.KeyboardE
     }
     board.select(new_square);
   }
+  if (event.key === ' ') {
+    board.submitAndUpdateBoardstate("/board/solve_square");
+  }
 }
 
 function packBoard(board: BoardState): TransmittableBoard {

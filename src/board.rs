@@ -105,6 +105,15 @@ fn one_to_nine() -> HashSet<u8> {
     set!(1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8)
 }
 
+fn get_box_index(idx: usize) -> u8 {
+    let row = idx % 9;
+    let col = idx / 9;
+    let block_x = row / 3;
+    let block_y = col / 3;
+    let bx = 3 * block_x + block_y;
+    return bx as u8;
+}
+
 impl Board {
     fn get_box(&self, bx: u8) -> SudokuBox {
         let y = (bx / 3) * 3;
@@ -422,20 +431,43 @@ fn place_derived_pencilmarks(board: Board, current_box: &SudokuBox) -> Board {
     for i in current_box.rows.clone() {
         let mut other_rows = current_box.rows.clone();
         other_rows.remove(&i);
-        let mut pencilmarks_in_row = HashSet::<u8>::new();
-        let mut pencilmarks_in_other_rows = HashSet::<u8>::new();
+        let mut box_a_pencilmarks_in_row = HashSet::<u8>::new();
+        let mut box_a_pencilmarks_in_other_rows = HashSet::<u8>::new();
+        let mut box_b_pencilmarks_in_row = HashSet::<u8>::new();
+        let mut box_b_pencilmarks_in_other_rows = HashSet::<u8>::new();
+        let mut box_a_idx: u8 = 10;
         for j in current_box.row_inds_outside_box(i) {
-            pencilmarks_in_row =
-                iter_to_set(pencilmarks_in_row.union(&board.pencilmarks[j as usize]));
+            if box_a_idx == 10 {
+                box_a_idx = get_box_index(j as usize);
+            }
+            if box_a_idx == get_box_index(j as usize) {
+                box_a_pencilmarks_in_row =
+                    iter_to_set(box_a_pencilmarks_in_row.union(&board.pencilmarks[j as usize]));
+            } else {
+                box_b_pencilmarks_in_row =
+                    iter_to_set(box_b_pencilmarks_in_row.union(&board.pencilmarks[j as usize]));
+            }
         }
         for h in other_rows {
             for j in current_box.row_inds_outside_box(h) {
-                pencilmarks_in_other_rows =
-                    iter_to_set(pencilmarks_in_other_rows.union(&board.pencilmarks[j as usize]));
+                if box_a_idx == get_box_index(j as usize) {
+                    box_a_pencilmarks_in_other_rows = iter_to_set(
+                        box_a_pencilmarks_in_other_rows.union(&board.pencilmarks[j as usize]),
+                    );
+                } else {
+                    box_b_pencilmarks_in_other_rows = iter_to_set(
+                        box_b_pencilmarks_in_other_rows.union(&board.pencilmarks[j as usize]),
+                    );
+                }
             }
         }
+
+        let box_a_elidable_pencilmarks =
+            iter_to_set(box_a_pencilmarks_in_row.difference(&box_a_pencilmarks_in_other_rows));
+        let box_b_elidable_pencilmarks =
+            iter_to_set(box_b_pencilmarks_in_row.difference(&box_b_pencilmarks_in_other_rows));
         let elidable_pencilmarks =
-            iter_to_set(pencilmarks_in_row.difference(&pencilmarks_in_other_rows));
+            iter_to_set(box_a_elidable_pencilmarks.union(&box_b_elidable_pencilmarks));
         for k in current_box.row_inds_inside_box(i) {
             // println!("Penciling out options from row {}, box {}", i, k);
             next_board.pencil_out_mut(k as usize, &elidable_pencilmarks);
@@ -574,15 +606,15 @@ fn pencil_and_place_complex(board: Solver, current_box: SudokuBox) -> Solver {
 
     next_board.board = place_simple_pencilmarks(next_board.board, &current_box);
 
-    next_board.board = place_derived_pencilmarks(next_board.board, &current_box);
+    // next_board.board = place_derived_pencilmarks(next_board.board, &current_box);
 
     next_board.board = resolve_cycle_pencilmarks(next_board.board, &current_box);
 
-    next_board.board = resolve_subset_pencilmarks(next_board.board, &current_box);
+    // next_board.board = resolve_subset_pencilmarks(next_board.board, &current_box);
 
-    // next_board.board = type_1_pencilmark_collapse(next_board.board, &current_box);
+    next_board.board = type_1_pencilmark_collapse(next_board.board, &current_box);
 
-    // next_board.board = type_2_pencilmark_collapse(next_board.board, &current_box);
+    next_board.board = type_2_pencilmark_collapse(next_board.board, &current_box);
 
     next_board.mark_if_finished(current_box);
 
